@@ -4457,8 +4457,75 @@ bool InterfacePlayerRDK::SetPlayBackRate(double rate)
 		gst_event_unref(rate_event);
 		MW_LOG_MIL("Current rate: %g", rate);
 	}
+    else if (platform == ePLATFORM_DEFAULT)
+    {
+        GstElement *playbin = nullptr;
+        MW_LOG_MIL("Raspberry Pi slow motion setting %f\n", rate);
+        if (gstPrivateContext->video_dec)
+        {
+            MW_LOG_MIL("Raspberry Pi video decoder %f\n", rate);
+            GstObject *parent_object = nullptr;
+            parent_object =  gst_element_get_parent(gstPrivateContext->video_dec);
+            if(!parent_object){
+                MW_LOG_ERR("Failed to get playbin parent");
+                return false;
+            }
+            playbin = GST_ELEMENT_CAST(parent_object); //Explicit cast to GstElement*
+            g_object_unref(parent_object);
+            if(!playbin){
+                MW_LOG_ERR("Failed to get playbin parent");
+                return false;
+            }
+            GstFormat fmt = GST_FORMAT_TIME;
+            gint64 cur = 0;
+            GstSeekFlags flags = GST_SEEK_FLAG_FLUSH;
+            GstSeekType start_type, stop_type;
+            gint64 start, stop;
+            gboolean ret = FALSE;
+            if (!gst_element_query_position(playbin, fmt, &cur))
+            {
+                MW_LOG_ERR("**PLAYBINTEST: query failed\n");
+                g_object_unref(playbin);
+                return false;
+            }
+
+            MW_LOG_MIL("**PLAYBINTEST: setting rate %f\n", rate);
+
+            if (rate < 0)
+            {
+                start_type = GST_SEEK_TYPE_NONE;
+                start = GST_CLOCK_TIME_NONE;
+                stop_type = GST_SEEK_TYPE_SET;
+                stop = cur;
+            }
+            else
+            {
+                start_type = GST_SEEK_TYPE_SET;
+                start = cur;
+                stop_type = GST_SEEK_TYPE_NONE;
+                stop = GST_CLOCK_TIME_NONE;
+            }
+            ret = gst_element_seek(playbin, rate, fmt, flags, start_type, start, stop_type, stop);
+            g_object_unref(playbin);
+            if(!ret)
+            {
+                MW_LOG_ERR("gst_element_seek failed");
+                return false;
+            }
+
+        }
+        else 
+        {
+            MW_LOG_MIL("No video or audio decoder to send rate change to");
+            MW_LOG_ERR("No video or audio decoder to send rate change to");
+            return false;
+        }
+
+    }
 	else
 	{
+        MW_LOG_MIL("Return false");
+        MW_LOG_ERR("Return false");
 		return false;
 	}
 	
